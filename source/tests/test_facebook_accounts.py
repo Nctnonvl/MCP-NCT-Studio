@@ -1,4 +1,6 @@
-import json,tempfile,time,unittest,os
+import json,tempfile,time,unittest,os,asyncio
+from types import SimpleNamespace
+from unittest.mock import Mock
 from pathlib import Path
 from unittest.mock import patch
 import desktop,facebook_accounts as accounts,approval_followup
@@ -79,6 +81,11 @@ class AccountTests(unittest.TestCase):
    with patch.object(uia,'ControlFromHandle',return_value=Node('WindowControl',children=[Node('ButtonControl','Test Chrome'),Node('ButtonControl','Test Chrome')])):
     with self.assertRaises(RuntimeError):desktop.verify_shared_profile(1,self.data)
   finally:desktop._BROWSER_PROFILE.reset(token)
+ def test_failed_profile_check_closes_new_window_without_clicking(self):
+  user32=SimpleNamespace(ShowWindow=Mock(),SetForegroundWindow=Mock())
+  with patch.object(desktop.ctypes,'windll',SimpleNamespace(user32=user32)),patch.object(desktop,'profile_windows',return_value=[11,22]),patch.object(desktop,'browser_profile',return_value=(self.data,'Profile 1')),patch.object(desktop,'foreground'),patch.object(desktop,'verify_shared_profile',side_effect=RuntimeError('bad profile')),patch.object(desktop,'window_identity',return_value=(123,456)),patch.object(desktop,'close_operation_window') as close:
+   with self.assertRaisesRegex(RuntimeError,'bad profile'):asyncio.run(desktop.focus_profile(self.data,[11],lambda text:None))
+   close.assert_called_once_with(22,self.data,[11],(123,456))
  def test_private_content_cannot_be_scheduled_to_another_account(self):
   aid=accounts.create(self.s,self.data,'Second');cid=self.s.content('Only the second account can post this caption')
   self.s.content_account(cid,aid)

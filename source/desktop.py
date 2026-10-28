@@ -243,7 +243,15 @@ async def focus_profile(data,previous,report):
         except RuntimeError:
             await asyncio.sleep(.5)
             continue
-        await asyncio.to_thread(verify_shared_profile,root,data)
+        try:await asyncio.to_thread(verify_shared_profile,root,data)
+        except Exception:
+            # focus_profile has not returned yet, so the outer cleanup has no
+            # window handle. Close only the newly created, identity-checked window.
+            try:
+                identity=window_identity(root)
+                await asyncio.to_thread(close_operation_window,root,data,previous,identity)
+            except Exception:pass
+            raise
         return root
     raise RuntimeError('Không lấy được cửa sổ trình duyệt Facebook trong 30 giây. Mở khóa Windows, bấm vào cửa sổ Facebook rồi thử lại.')
 
