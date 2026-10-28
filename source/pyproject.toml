@@ -1,6 +1,6 @@
 [project]
 name = "nct-group-manager"
-version = "1.1.7"
+version = "1.1.8"
 description = "Local Telegram control, Ollama content and Windows MCP group publishing"
 requires-python = ">=3.14"
 dependencies = [

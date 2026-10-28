@@ -2,7 +2,7 @@
 import base64,hashlib,json,re,urllib.request,threading,uuid
 from pathlib import Path
 from urllib.parse import urlsplit
-VERSION='1.1.7'
+VERSION='1.1.8'
 FEED='https://github.com/Nctnonvl/MCP-NCT-Studio/releases/latest/download/update.json'
 _DOWNLOAD_LOCK=threading.Lock()
 
