@@ -14,8 +14,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly:System.Reflection.AssemblyTitle("NCT Studio")]
 [assembly:System.Reflection.AssemblyDescription("NCT Studio desktop")]
-[assembly:System.Reflection.AssemblyVersion("1.1.0.0")]
-[assembly:System.Reflection.AssemblyFileVersion("1.1.0.0")]
+[assembly:System.Reflection.AssemblyVersion("1.1.1.0")]
+[assembly:System.Reflection.AssemblyFileVersion("1.1.1.0")]
 static class Program {
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int command);
@@ -23,12 +23,14 @@ static class Program {
         Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
         string root=AppDomain.CurrentDomain.BaseDirectory;
         string data=File.Exists(Path.Combine(root,"portable.mode"))?Path.Combine(root,"data"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NCT Studio","data");
-        int smoke=0;string report="";
+        int smoke=0,restartParent=0;string report="";
         for(int i=0;i<args.Length;i++){
-            if(args[i]=="--data-dir" && i+1<args.Length)data=Path.GetFullPath(args[++i]);
+            if(args[i]=="--restart-parent" && i+1<args.Length)restartParent=int.Parse(args[++i]);
+            else if(args[i]=="--data-dir" && i+1<args.Length)data=Path.GetFullPath(args[++i]);
             else if(args[i]=="--smoke-test" && i+1<args.Length)smoke=int.Parse(args[++i]);
             else if(args[i]=="--test-report" && i+1<args.Length)report=Path.GetFullPath(args[++i]);
         }
+        if(restartParent>0){try{if(!Process.GetProcessById(restartParent).WaitForExit(30000))return;}catch(ArgumentException){}}
         string id;using(var sha=System.Security.Cryptography.SHA256.Create())id=BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(data.ToLowerInvariant()))).Replace("-","").Substring(0,20);
         bool first;using(var mutex=new Mutex(true,"Local\\NCTStudio-"+id,out first)){
             if(!first){foreach(Process p in Process.GetProcessesByName("NCT Studio")){if(p.Id!=Process.GetCurrentProcess().Id && p.MainWindowHandle!=IntPtr.Zero){ShowWindow(p.MainWindowHandle,9);SetForegroundWindow(p.MainWindowHandle);break;}}return;}
@@ -40,7 +42,7 @@ static class Program {
 
 class Studio:Form {
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);
-    string root,data,url="",origin="",key="",report,installer="";int smoke;Process backend;WebView2 web;
+    string root,data,url="",origin="",key="",report,installer="",importSource="";int smoke;Process backend;WebView2 web;
     Label title,status;bool ready=false,closing=false,exitAllowed=false;StreamWriter log;
     TaskCompletionSource<string> address=new TaskCompletionSource<string>();
     public Studio(string r,string d,int test,string reportPath){
@@ -120,6 +122,11 @@ class Studio:Form {
                 if(message=="exit-confirmed"){await Shutdown();return;}
                 try{
                     var obj=new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<System.Collections.Generic.Dictionary<string,string>>(message);
+                    if(obj["action"]=="import-data"){
+                        string selected=Path.GetFullPath(obj["source"]);
+                        if(!File.Exists(Path.Combine(selected,"manager.sqlite3")))throw new Exception("Chọn thư mục data có manager.sqlite3.");
+                        importSource=selected;await Shutdown();return;
+                    }
                     if(obj["action"]!="install-update")return;
                     string path=Path.GetFullPath(obj["path"]);string folder=Path.GetFullPath(Path.Combine(data,"updates"))+Path.DirectorySeparatorChar;
                     if(!path.StartsWith(folder,StringComparison.OrdinalIgnoreCase) || !Regex.IsMatch(Path.GetFileName(path),@"^NCT-Studio-Setup-\d+\.\d+\.\d+\.exe$"))return;
@@ -128,7 +135,7 @@ class Studio:Form {
                         if(hash!=obj["sha256"])return;
                     }
                     installer=path;await Shutdown();
-                }catch(Exception ex){status.Text="Chưa cài cập nhật: "+ex.Message;status.Visible=true;}
+                }catch(Exception ex){status.Text="Chưa thực hiện: "+ex.Message;status.Visible=true;}
             };
             web.CoreWebView2.NavigationCompleted+=async delegate(object s,CoreWebView2NavigationCompletedEventArgs e){
                 if(!e.IsSuccess){status.Text="Chưa tải được giao diện. Đóng và mở lại ứng dụng.";status.Visible=true;return;}
@@ -152,7 +159,17 @@ class Studio:Form {
                 bool ended=await Task.Run(()=>backend.WaitForExit(15000));
                 if(!ended)backend.Kill();
             }
-        }finally{if(web!=null)web.Dispose();if(log!=null){lock(log)log.Dispose();}if(report!="")File.AppendAllText(report,"\nCLOSED");exitAllowed=true;if(installer!="")Process.Start(new ProcessStartInfo(installer){UseShellExecute=true,Arguments="/DIR=\""+root.TrimEnd(Path.DirectorySeparatorChar)+"\""});Close();}
+        }finally{if(web!=null)web.Dispose();if(log!=null){lock(log)log.Dispose();}if(report!="")File.AppendAllText(report,"\nCLOSED");}
+        if(importSource!=""){
+                title.Visible=true;status.Visible=true;status.Text="Đang sao lưu và nhập dữ liệu…";
+                using(Process importer=Process.Start(Python("deployment.py","--import-data \""+importSource+"\" --destination \""+data+"\" --replace-existing"))){
+                    Task<string> error=importer.StandardError.ReadToEndAsync();Task<string> output=importer.StandardOutput.ReadToEndAsync();
+                    await Task.Run(()=>importer.WaitForExit());await output;await error;
+                    if(importer.ExitCode!=0)MessageBox.Show("Chưa nhập được dữ liệu. Dữ liệu trước đó đã được giữ/khôi phục; xem thư mục data.backup-* nếu cần. Kiểm tra nguồn rồi thử lại.","NCT Studio");
+                }
+                Process.Start(new ProcessStartInfo(Path.Combine(root,"NCT Studio.exe")){UseShellExecute=true,Arguments="--restart-parent "+Process.GetCurrentProcess().Id+" --data-dir \""+data+"\""});
+            }
+            exitAllowed=true;if(installer!="")Process.Start(new ProcessStartInfo(installer){UseShellExecute=true,Arguments="/DIR=\""+root.TrimEnd(Path.DirectorySeparatorChar)+"\""});Close();
     }
 }
 

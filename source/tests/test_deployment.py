@@ -43,3 +43,16 @@ class DeploymentTests(unittest.TestCase):
   data=self.root/'fresh';s=Store(data/'manager.sqlite3');deployment.prepare(s,data);facebook_accounts.bootstrap(s,data)
   self.assertEqual(len(facebook_accounts.catalog(s)),1)
   self.assertEqual(json.loads((data/'browser-profile.json').read_text())['browser'],'chrome')
+ def test_replace_keeps_backup_and_imports(self):
+  target=self.root/'current';Store(target/'manager.sqlite3').set('marker','original')
+  backup=deployment.replace_data(self.old,target)
+  self.assertEqual(Store(Path(backup)/'manager.sqlite3').get('marker'),'original')
+  self.assertTrue((target/'media/test.png').exists())
+ def test_failed_replace_restores_current_data(self):
+  target=self.root/'current';Store(target/'manager.sqlite3').set('marker','original')
+  with patch('deployment.import_data',side_effect=ValueError('invalid source')):
+   with self.assertRaises(ValueError):deployment.replace_data(self.old,target)
+  self.assertEqual(Store(target/'manager.sqlite3').get('marker'),'original')
+ def test_replace_rejects_own_or_nested_data(self):
+  for target in (self.old,self.old/'nested',self.root):
+   with self.assertRaises(ValueError):deployment.replace_data(self.old,target)

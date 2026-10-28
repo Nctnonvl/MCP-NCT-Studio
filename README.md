@@ -76,3 +76,7 @@ Các kiểm thử này dùng dữ liệu tạm/mô phỏng. Bản EXE 1.1.0 đã
 ## Dành cho người phát hành
 
 Xem [hướng dẫn ký và phát hành cập nhật](docs/RELEASING.md). Không đưa dữ liệu cá nhân hay khóa ký riêng lên Git; `.gitignore` đã loại các thư mục này.
+
+## Nhập kho cũ sau lần mở đầu
+
+Từ bản 1.1.1: vào **Cài đặt → Nhập dữ liệu cũ**, nhập đường dẫn thư mục `data` chứa `manager.sqlite3`, rồi chọn **Nhập dữ liệu và mở lại**. Kho hiện tại được sao lưu vào `data.backup-*` trước khi thay thế. Đây là thay thế kho, không gộp hai kho. Nguồn không bị sửa; cần nhập lại key/token và đăng nhập Facebook, lịch nhập về nháp.

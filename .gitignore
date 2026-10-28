@@ -1,5 +1,7 @@
 # Personal application data, browser profiles and credentials
 **/data/
+**/data.backup-*/
+**/data.import-*/
 **/chrome-profile/
 **/edge-profile/
 **/facebook-profiles/

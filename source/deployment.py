@@ -144,8 +144,25 @@ def import_data(source,destination):
         shutil.rmtree(stage,ignore_errors=True)
         raise
 
+def replace_data(source,destination):
+    source=Path(source).resolve();destination=Path(destination).resolve()
+    if source==destination or source.is_relative_to(destination) or destination.is_relative_to(source):raise ValueError('Thư mục nguồn và đích phải tách biệt; không chọn dữ liệu đang sử dụng.')
+    if not (source/'manager.sqlite3').is_file():raise ValueError('Chọn thư mục data có manager.sqlite3.')
+    backup=None
+    if destination.exists():
+        backup=destination.with_name(destination.name+'.backup-'+str(time.time_ns()))
+        destination.rename(backup)
+    try:import_data(source,destination)
+    except Exception:
+        if backup and not destination.exists():backup.rename(destination)
+        raise
+    return str(backup) if backup else ''
+
 if __name__=='__main__':
     import argparse
-    p=argparse.ArgumentParser();p.add_argument('--import-data',required=True);p.add_argument('--destination',required=True);a=p.parse_args()
-    import_data(a.import_data,a.destination)
+    p=argparse.ArgumentParser();p.add_argument('--import-data',required=True);p.add_argument('--destination',required=True);p.add_argument('--replace-existing',action='store_true');a=p.parse_args()
+    if a.replace_existing:
+        backup=replace_data(a.import_data,a.destination)
+        if backup:print('Dữ liệu trước khi nhập được sao lưu tại: '+backup)
+    else:import_data(a.import_data,a.destination)
     print('Đã nhập dữ liệu. Chưa bật lịch hoặc đăng bài.')
