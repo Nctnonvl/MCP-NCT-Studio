@@ -240,9 +240,11 @@ async def focus_profile(data,previous,report):
     for attempt in range(60):
         try:
             foreground(root)
-            return root
         except RuntimeError:
             await asyncio.sleep(.5)
+            continue
+        await asyncio.to_thread(verify_shared_profile,root,data)
+        return root
     raise RuntimeError('Không lấy được cửa sổ trình duyệt Facebook trong 30 giây. Mở khóa Windows, bấm vào cửa sổ Facebook rồi thử lại.')
 
 
@@ -279,6 +281,25 @@ def active_root():
     user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
     user32.GetAncestor.restype = wintypes.HWND
     return user32.GetAncestor(user32.GetForegroundWindow(), 3)
+
+def verify_shared_profile(root,data):
+    """Require the selected Chrome profile's own toolbar badge, never page text."""
+    name=selected_browser_config(data).get('shared_profile_name','').strip()
+    if not name:return
+    import comtypes,windows_mcp.uia as uia
+    comtypes.CoInitialize()
+    try:
+        queue=[uia.ControlFromHandle(root)];matches=[];budget=1200
+        while queue and budget:
+            node=queue.pop();budget-=1
+            if node.ControlTypeName=='DocumentControl':continue
+            label=normalized(getattr(node,'Name',''))
+            expected=normalized(name)
+            if node.ControlTypeName=='ButtonControl' and (label==expected or label in {f'profile: {expected}',f'hồ sơ: {expected}'}):matches.append(node)
+            try:queue.extend(node.GetChildren())
+            except Exception:pass
+        if queue or len(matches)!=1:raise RuntimeError('Không xác minh được hồ sơ Chrome của cửa sổ. Đã dừng để tránh dùng nhầm tài khoản.')
+    finally:comtypes.CoUninitialize()
 
 
 def window_identity(root):
@@ -1021,6 +1042,7 @@ async def _execute(job):
                                 if has_video and (not surface['complete'] or not surface['composer'] or not surface['enabled'] or surface['busy']):
                                     history.append('wait video changed before submit');continue
                             verify_live_target(matches[0],browser_root if identity_mode!='default' else None)
+                            await asyncio.to_thread(verify_shared_profile,browser_root,data)
                             job['submitted_at']=time.time()
                             submitted = True  # Set BEFORE the irreversible click; errors after this are uncertain.
                             await tool('Click', {'loc': matches[0]['loc']})

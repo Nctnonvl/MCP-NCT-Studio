@@ -1,4 +1,4 @@
-import json,tempfile,time,unittest
+import json,tempfile,time,unittest,os
 from pathlib import Path
 from unittest.mock import patch
 import desktop,facebook_accounts as accounts,approval_followup
@@ -36,6 +36,49 @@ class AccountTests(unittest.TestCase):
   self.assertEqual(len(accounts.catalog(self.s)),1)
  def test_invalid_account_cannot_be_assigned(self):
   with self.assertRaises(ValueError):accounts.assign(self.s,self.g,'missing')
+ def test_existing_chrome_profile_is_selected_and_frozen_without_cookie_copy(self):
+  root=self.data/'Google/Chrome/User Data';profile=root/'Profile 2';profile.mkdir(parents=True)
+  (profile/'Preferences').write_text('{}');(root/'Local State').write_text(json.dumps({'profile':{'info_cache':{'Profile 2':{'name':'Test Chrome','user_name':'private@example.invalid'}}}}))
+  with patch.dict(os.environ,{'LOCALAPPDATA':str(self.data)}):
+   self.assertEqual(accounts.chrome_profiles(),[{'id':'Profile 2','name':'Test Chrome','usable':True}])
+   aid=accounts.use_chrome_profile(self.s,'Profile 2','Facebook test');accounts.assign(self.s,self.g,aid)
+   jid=self.plan('Test frozen profile');saved=json.loads(self.job(jid)['browser_profile_json'])
+   self.assertEqual(saved['profile_directory'],'Profile 2');self.assertEqual(saved['shared_profile_name'],'Test Chrome')
+   token=desktop._BROWSER_PROFILE.set(saved)
+   try:self.assertEqual(desktop.browser_profile(self.data),(root.resolve(),'Profile 2'))
+   finally:desktop._BROWSER_PROFILE.reset(token)
+   with self.assertRaises(ValueError):accounts.use_chrome_profile(self.s,'Profile 2','Duplicate')
+   self.assertFalse((self.data/'facebook-profiles'/aid).exists())
+   # A copied database on another machine cannot reuse a machine-specific Chrome profile.
+   import deployment
+   copied=self.data/'imported'
+   deployment.import_data(self.data,copied)
+   moved=Store(copied/'manager.sqlite3').rows('select profile from facebook_accounts where id=?',(aid,))[0]
+   self.assertNotIn('shared_profile_name',json.loads(moved['profile']))
+ def test_invalid_or_ambiguous_profile_is_rejected(self):
+  root=self.data/'Google/Chrome/User Data';root.mkdir(parents=True)
+  for name in ('Default','Profile 1'):
+   (root/name).mkdir();(root/name/'Preferences').write_text('{}')
+  (root/'Local State').write_text(json.dumps({'profile':{'info_cache':{'Default':{'name':'Same'},'Profile 1':{'name':'Same'}}}}))
+  with patch.dict(os.environ,{'LOCALAPPDATA':str(self.data)}):
+   self.assertTrue(all(not p['usable'] for p in accounts.chrome_profiles()))
+   for invalid in ('Default','../Default','Profile 9'):
+    with self.assertRaises(ValueError):accounts.use_chrome_profile(self.s,invalid,'Test')
+ def test_profile_check_rejects_page_content_and_wrong_toolbar_badge(self):
+  class Node:
+   def __init__(self,role,name='',children=()):self.ControlTypeName=role;self.Name=name;self.children=children
+   def GetChildren(self):return self.children
+  import windows_mcp.uia as uia
+  token=desktop._BROWSER_PROFILE.set({'shared_profile_name':'Test Chrome'})
+  try:
+   doc=Node('DocumentControl',children=[Node('ButtonControl','Test Chrome')])
+   with patch.object(uia,'ControlFromHandle',return_value=Node('WindowControl',children=[doc,Node('ButtonControl','Other')])):
+    with self.assertRaises(RuntimeError):desktop.verify_shared_profile(1,self.data)
+   with patch.object(uia,'ControlFromHandle',return_value=Node('WindowControl',children=[doc,Node('ButtonControl','Test Chrome')])):
+    desktop.verify_shared_profile(1,self.data)
+   with patch.object(uia,'ControlFromHandle',return_value=Node('WindowControl',children=[Node('ButtonControl','Test Chrome'),Node('ButtonControl','Test Chrome')])):
+    with self.assertRaises(RuntimeError):desktop.verify_shared_profile(1,self.data)
+  finally:desktop._BROWSER_PROFILE.reset(token)
  def test_private_content_cannot_be_scheduled_to_another_account(self):
   aid=accounts.create(self.s,self.data,'Second');cid=self.s.content('Only the second account can post this caption')
   self.s.content_account(cid,aid)

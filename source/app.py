@@ -1168,7 +1168,7 @@ def web_state():
     calendars=STORE.group_calendars()
     pending_approval_jobs=STORE.rows("SELECT id,group_name,state,post_url FROM jobs WHERE state='pending' AND hidden=0 AND calendar_released=0 ORDER BY id DESC LIMIT 100")
     targets=STORE.rows('SELECT content_id,group_id FROM content_targets')
-    return {'facebook_accounts':__import__('facebook_accounts').catalog(STORE),'approval_pending_jobs':pending_approval_jobs,'approval_checks':__import__('approval_followup').status(STORE),'approval_monitor_paused':not __import__('approval_followup').enabled(STORE),'browser':__import__('desktop').browser_status(DATA),'runtime':{'revision':RUNTIME_REVISION,'restart_required':code_revision(ROOT)!=RUNTIME_REVISION},'paired': bool(STORE.get('owner_id')), 'pair_command': '' if STORE.get('owner_id') else '/pair '+STORE.get('pair_code'),
+    return {'chrome_profiles':__import__('facebook_accounts').chrome_profiles(),'facebook_accounts':__import__('facebook_accounts').catalog(STORE),'approval_pending_jobs':pending_approval_jobs,'approval_checks':__import__('approval_followup').status(STORE),'approval_monitor_paused':not __import__('approval_followup').enabled(STORE),'browser':__import__('desktop').browser_status(DATA),'runtime':{'revision':RUNTIME_REVISION,'restart_required':code_revision(ROOT)!=RUNTIME_REVISION},'paired': bool(STORE.get('owner_id')), 'pair_command': '' if STORE.get('owner_id') else '/pair '+STORE.get('pair_code'),
         'online_update':__import__('online_update').status(STORE),'deployment_notice':STORE.get('deployment_notice',''),'desktop_app':bool(os.environ.get('NCT_DESKTOP')),'configured': bool(cfg.get('token')), 'username': cfg.get('username', ''), 'model': cfg['model'], 'mode': cfg['mode'],
         'status': status_text(), 'groups': [{**g,'calendar':calendars.get(g['id'],{}),'media_pools':[m['pool'] for m in STORE.rows('SELECT pool FROM group_media_pools WHERE group_id=?',(g['id'],))]} for g in STORE.rows('SELECT * FROM groups WHERE deleted=0 ORDER BY id')],
         'group_statistics_reset_at':STORE.get('group_metrics_reset',{}).get('at',0),'group_statistics':__import__('group_metrics').statistics(STORE),'group_watchlist':STORE.group_watchlist(),
@@ -1305,6 +1305,9 @@ class Handler(BaseHTTPRequestHandler):
             elif route == '/api/group-watch-decision':
                 decision=STORE.decide_group_watch(int(obj['id']),obj.get('decision',''))
                 result='Đã giữ nhóm; bắt đầu đếm lượt mới.' if decision=='keep' else 'Đã xóa nhóm khỏi tool.'
+            elif route == '/api/facebook-account-existing-chrome':
+                __import__('facebook_accounts').use_chrome_profile(STORE,str(obj.get('profile_id','')),obj.get('name',''),obj.get('facebook_account',''))
+                result='Đã thêm hồ sơ Chrome. Chọn tài khoản này ở các nhóm cần dùng.'
             elif route == '/api/facebook-account-add':
                 aid=__import__('facebook_accounts').create(STORE,DATA,obj.get('name',''),obj.get('facebook_account',''))
                 result='Đã tạo hồ sơ riêng. Bấm Mở Facebook để tự đăng nhập, rồi gán tài khoản cho nhóm.'

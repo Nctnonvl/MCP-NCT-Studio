@@ -1,5 +1,5 @@
 """Separate local browser profiles; queued jobs retain their original account."""
-import json,secrets,time
+import json,secrets,time,os,re
 from pathlib import Path
 
 def bootstrap(store,data):
@@ -21,6 +21,39 @@ def create(store,data,name,facebook_account=''):
     root.mkdir(parents=True,exist_ok=False)
     profile={'browser':'chrome','user_data_dir':str(root),'profile_directory':None,'display_name':name,'facebook_account':actor}
     with store.db() as c:c.execute('INSERT INTO facebook_accounts VALUES(?,?,?,?)',(aid,name,json.dumps(profile,ensure_ascii=False),time.time()))
+    return aid
+
+def chrome_profiles():
+    root=Path(os.environ.get('LOCALAPPDATA',''))/'Google/Chrome/User Data'
+    if not (root/'Local State').is_file():return []
+    try:state=json.loads((root/'Local State').read_text(encoding='utf-8'))
+    except (OSError,ValueError):return []
+    if not isinstance(state,dict) or not isinstance(state.get('profile'),dict):return []
+    cache=state['profile'].get('info_cache',{})
+    if not isinstance(cache,dict):return []
+    profiles=[]
+    for directory,info in cache.items():
+        if not isinstance(info,dict):continue
+        if not re.fullmatch(r'Default|Profile [0-9]+',directory) or not (root/directory/'Preferences').is_file():continue
+        name=str(info.get('name','')).strip()
+        if name:profiles.append({'id':directory,'name':name})
+    for item in profiles:item['usable']=sum(p['name'].casefold()==item['name'].casefold() for p in profiles)==1
+    return sorted(profiles,key=lambda item:item['name'].casefold())
+
+def use_chrome_profile(store,directory,name,facebook_account=''):
+    name=str(name).strip();actor=str(facebook_account).strip()
+    if not name or len(name)>80 or len(actor)>100:raise ValueError('Nhập tên tài khoản tối đa 80 ký tự.')
+    choices=[p for p in chrome_profiles() if p['id']==directory and p['usable']]
+    if len(choices)!=1:raise ValueError('Không tìm thấy hồ sơ Chrome duy nhất. Tải lại danh sách và chọn lại.')
+    root=(Path(os.environ['LOCALAPPDATA'])/'Google/Chrome/User Data').resolve()
+    aid='acc_'+secrets.token_hex(8)
+    profile={'browser':'chrome','user_data_dir':str(root),'profile_directory':directory,'display_name':name,'facebook_account':actor,'shared_profile_name':choices[0]['name']}
+    with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        for existing in c.execute('SELECT profile FROM facebook_accounts'):
+            other=json.loads(existing['profile'])
+            if other.get('browser')=='chrome' and os.path.normcase(str(other.get('user_data_dir','')))==os.path.normcase(str(root)) and other.get('profile_directory')==directory:raise ValueError('Hồ sơ Chrome này đã được thêm vào tool.')
+        c.execute('INSERT INTO facebook_accounts VALUES(?,?,?,?)',(aid,name,json.dumps(profile,ensure_ascii=False),time.time()))
     return aid
 
 def assign(store,gid,aid):

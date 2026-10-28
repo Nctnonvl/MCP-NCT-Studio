@@ -122,6 +122,7 @@ def import_data(source,destination):
                 import re
                 aid=row['id'];profile=json.loads(row['profile'])
                 if aid!='main' and not re.fullmatch(r'acc_[0-9a-f]{16}',aid):raise ValueError('ID tài khoản trong dữ liệu nhập không hợp lệ.')
+                profile.pop('shared_profile_name',None)
                 profile.update(browser='chrome',user_data_dir=str(destination/('chrome-profile' if aid=='main' else 'facebook-profiles/'+aid)),profile_directory=None)
                 profiles[aid]=json.dumps(profile,ensure_ascii=False)
                 c.execute('UPDATE facebook_accounts SET profile=? WHERE id=?',(profiles[aid],aid))
