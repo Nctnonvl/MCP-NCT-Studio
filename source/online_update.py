@@ -2,7 +2,7 @@
 import base64,hashlib,json,re,urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
-VERSION='1.1.5'
+VERSION='1.1.6'
 FEED='https://github.com/Nctnonvl/MCP-NCT-Studio/releases/latest/download/update.json'
 
 def url(value):
