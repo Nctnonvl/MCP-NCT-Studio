@@ -28,6 +28,12 @@ class GroupScanTests(unittest.TestCase):
   new=self.s.rows("SELECT * FROM groups WHERE url='https://www.facebook.com/groups/999/'")[0]
   self.assertEqual((new['category'],new['enabled'],new['link_policy']),('The isle',0,'unknown'))
   self.assertEqual(import_found(self.s,rows)['added'],0)
+ def test_import_assigns_selected_account_only_to_new_groups(self):
+  gid=self.s.add_group('facebook.com/groups/123','Existing')
+  result=import_found(self.s,[{'url':'https://facebook.com/groups/123','name':'Existing'},{'url':'https://facebook.com/groups/999','name':'New'}],'acc_new')
+  self.assertEqual(result['added'],1)
+  self.assertEqual(self.s.rows('SELECT account_id FROM groups WHERE id=?',(gid,))[0]['account_id'],'main')
+  self.assertEqual(self.s.rows('SELECT account_id FROM groups WHERE id=?',(result['group_ids'][0],))[0]['account_id'],'acc_new')
  def test_same_name_different_groups_are_not_merged(self):
   rows=[{'url':f'https://facebook.com/groups/{i}','name':'The Isle Việt Nam'} for i in (1,2)]
   self.assertEqual(import_found(self.s,rows)['added'],2)
@@ -52,6 +58,7 @@ class GroupScanTests(unittest.TestCase):
   self.assertIsNone(self.s.claim())
   with self.assertRaises(ValueError):GroupScanner(self.s,self.tmp.name).start()
  def test_start_pauses_queue_before_background_work(self):
+  with self.s.db() as c:c.execute("INSERT INTO facebook_accounts VALUES('main','Main','{}',0)")
   scanner=GroupScanner(self.s,self.tmp.name);self.s.set('running',True)
   with patch('group_scan.threading.Thread') as thread:
    scanner.start();thread.return_value.start.assert_called_once()

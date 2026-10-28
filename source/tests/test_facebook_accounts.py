@@ -31,6 +31,21 @@ class AccountTests(unittest.TestCase):
    self.assertFalse(desktop.profile_matches(['chrome.exe','--user-data-dir='+str(self.data/'chrome-profile')],self.data))
   finally:desktop._BROWSER_PROFILE.reset(token)
   self.assertEqual(desktop.browser_profile(self.data)[0],(self.data/'chrome-profile').resolve())
+ def test_assignment_updates_only_never_attempted_jobs(self):
+  safe=self.plan('A shared caption for the new account')
+  attempted=self.plan('Another attempted caption')
+  with self.s.db() as c:c.execute("update jobs set state='queued',attempted_at=1,post_attempted=1 where id=?",(attempted,))
+  aid=accounts.create(self.s,self.data,'Second')
+  result=accounts.assign(self.s,self.g,aid)
+  self.assertEqual(result['changed'],1)
+  self.assertEqual(self.job(safe)['account_id'],aid)
+  self.assertEqual(self.job(attempted)['account_id'],'main')
+ def test_assignment_blocks_private_content_of_old_account(self):
+  cid=self.s.content('Only my original account owns this caption');self.s.content_account(cid,'main')
+  self.s.targets(cid,'selected',[self.g]);jid=self.s.plan(cid,60)[0]
+  aid=accounts.create(self.s,self.data,'Second');result=accounts.assign(self.s,self.g,aid)
+  self.assertEqual(result['blocked'],1);self.assertEqual(self.job(jid)['state'],'draft')
+  self.s.approve([jid]);self.assertEqual(self.job(jid)['state'],'draft')
  def test_bootstrap_keeps_legacy_approval_hash(self):
   jid=self.plan('An existing pending post');old_revision=approval_followup.profile_revision(self.data)
   self.assertEqual(old_revision,approval_followup.profile_revision(self.data,self.job(jid)))

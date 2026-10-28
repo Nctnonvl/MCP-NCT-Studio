@@ -64,8 +64,35 @@ def assign(store,gid,aid):
     with store.db() as c:
         c.execute('BEGIN IMMEDIATE')
         if not c.execute('SELECT 1 FROM facebook_accounts WHERE id=?',(aid,)).fetchone():raise ValueError('Không tìm thấy tài khoản.')
+        if c.execute("SELECT 1 FROM jobs WHERE group_id=? AND state='working'",(gid,)).fetchone():raise ValueError('Nhóm đang được thao tác. Chờ hoàn tất rồi đổi tài khoản.')
         if not c.execute('UPDATE groups SET account_id=? WHERE id=? AND deleted=0',(aid,gid)).rowcount:raise ValueError('Không tìm thấy nhóm.')
-    # Existing jobs are intentionally frozen to their author, including pending posts.
+        return sync_queued_accounts_in_transaction(c,gid)
+
+def sync_queued_accounts_in_transaction(c,gid=None):
+    """Only never-attempted drafts/queued jobs may follow a changed group account."""
+    sql="""SELECT j.id,j.content_id,j.group_id,j.account_id,g.account_id AS target,a.profile,p.account_id AS owner
+      FROM jobs j JOIN groups g ON g.id=j.group_id JOIN facebook_accounts a ON a.id=g.account_id
+      LEFT JOIN contents p ON p.id=j.content_id
+      WHERE j.state IN ('draft','queued') AND j.attempted_at=0 AND j.post_attempted IN (-1,0)
+      AND j.account_id<>g.account_id AND g.deleted=0"""
+    rows=c.execute(sql+(' AND j.group_id=?' if gid is not None else ''), (gid,) if gid is not None else ()).fetchall()
+    changed=blocked=0
+    for row in rows:
+        if row['owner'] and row['owner']!=row['target']:
+            c.execute("UPDATE jobs SET state='draft',detail='Bài thuộc tài khoản khác. Chọn lại bài phù hợp trước khi lên lịch.',schedule_note='Không chuyển tài khoản bài riêng.' WHERE id=?",(row['id'],));blocked+=1
+        else:
+            c.execute("UPDATE jobs SET account_id=?,browser_profile_json=?,schedule_note='Đã đồng bộ tài khoản theo nhóm trước khi thao tác.' WHERE id=?",(row['target'],row['profile'],row['id']));changed+=1
+    extra=" AND j.group_id=?" if gid is not None else ""
+    attempted=c.execute("SELECT j.id,j.post_attempted FROM jobs j JOIN groups g ON g.id=j.group_id WHERE j.state='queued' AND j.attempted_at>0 AND j.account_id<>g.account_id"+extra,(gid,) if gid is not None else ()).fetchall()
+    for row in attempted:
+        state='uncertain' if row['post_attempted']!=0 else 'draft'
+        c.execute("UPDATE jobs SET state=?,detail='Tài khoản nhóm đã đổi sau khi thao tác; cần kiểm tra lượt cũ trước khi tiếp tục.' WHERE id=?",(state,row['id']));blocked+=1
+    return {'changed':changed,'blocked':blocked}
+
+def sync_queued_accounts(store):
+    with store.db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        return sync_queued_accounts_in_transaction(c)
 
 def freeze(c,jid,gid):
     group=c.execute('SELECT account_id FROM groups WHERE id=?',(gid,)).fetchone()

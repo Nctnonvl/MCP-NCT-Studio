@@ -37,7 +37,7 @@ def joined_cards(cards):
             found[url.casefold()]={'url':url,'name':name[:160],'category':game_from_name(name)}
     return list(found.values())
 
-def import_found(store,rows):
+def import_found(store,rows,account_id="main"):
     added=[];duplicates=0;seen=set();review=[]
     with store.db() as c:
         c.execute('BEGIN IMMEDIATE')
@@ -56,7 +56,7 @@ def import_found(store,rows):
                         c.execute('INSERT OR IGNORE INTO group_aliases VALUES(?,?)',(alias,gid));existing[alias]=gid
                 continue
             category=game_from_name(row['name'])
-            gid=c.execute("INSERT INTO groups(url,name,rules,category,enabled,link_policy) VALUES(?,?,?, ?,0,'unknown')",(url,str(row['name'])[:160],'',category)).lastrowid
+            gid=c.execute("INSERT INTO groups(url,name,rules,category,enabled,link_policy,account_id) VALUES(?,?,?, ?,0,'unknown',?)",(url,str(row['name'])[:160],'',category,account_id)).lastrowid
             if category:c.execute('INSERT OR IGNORE INTO group_media_pools VALUES(?,?)',(gid,category))
             added.append(gid);existing[key]=gid
             for alias in row.get('aliases',[]):c.execute('INSERT OR IGNORE INTO group_aliases VALUES(?,?)',(group_url(alias).casefold(),gid))
@@ -120,15 +120,16 @@ class GroupScanner:
         self.window=None;self.previous=[];self.identity=None
     def update(self,**values):
         state=self.store.get('group_scan',{});state.update(values,updated=time.time());self.store.set('group_scan',state)
-    def start(self):
+    def start(self,account_id="main"):
         with self.store.db() as c:
             c.execute('BEGIN IMMEDIATE')
+            if not c.execute('SELECT 1 FROM facebook_accounts WHERE id=?',(account_id,)).fetchone():raise ValueError('Tài khoản quét không tồn tại. Chọn lại tài khoản.')
             from link_refresh import busy
             if busy(c):raise ValueError('Đang cập nhật link Facebook. Chờ xong hoặc dừng cập nhật trước khi quét nhóm.')
             if self.store.get('group_scan',{}).get('status')=='running':raise ValueError('Đang quét nhóm; chờ hoàn tất hoặc bấm Dừng quét.')
             if c.execute("SELECT 1 FROM jobs WHERE state='working'").fetchone():raise ValueError('Worker đang thao tác Facebook. Tạm dừng và chờ worker kết thúc trước khi quét.')
             if self.store.get('studio_task',{}).get('status')=='running':raise ValueError('AI đang tạo bài. Chờ hoàn tất trước khi quét.')
-            for key,value in [('running',False),('paused_by_user',True),('control_revision',self.store.get('control_revision',0)+1),('group_scan',{'status':'running','message':'Đang mở danh sách nhóm đã tham gia…','found':0,'updated':time.time()})]:
+            for key,value in [('running',False),('paused_by_user',True),('control_revision',self.store.get('control_revision',0)+1),('group_scan',{'status':'running','account_id':account_id,'message':'Đang mở danh sách nhóm đã tham gia…','found':0,'updated':time.time()})]:
                 c.execute('INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v',(key,json.dumps(value)))
         self.stop.clear()
         threading.Thread(target=self.monitor,daemon=True).start()
@@ -168,9 +169,15 @@ class GroupScanner:
                     if closed:self.update(browser_closed=True)
                 except Exception as exc:self.update(browser_close_detail=str(exc)[:200])
     def run(self):
+        from desktop import _BROWSER_PROFILE
+        token=None
         try:
+            account_id=self.store.get('group_scan',{}).get('account_id','main')
+            accounts=self.store.rows('SELECT profile FROM facebook_accounts WHERE id=?',(account_id,))
+            if not accounts and account_id!='main':raise ValueError('Không tìm thấy tài khoản đã chọn để quét.')
+            token=_BROWSER_PROFILE.set(json.loads(accounts[0]['profile']) if accounts else None)
             rows,complete=asyncio.run(self.scan())
-            counts=import_found(self.store,rows)
+            counts=import_found(self.store,rows,account_id)
             self.update(status='done' if complete else 'stopped',**counts,message=f"{'Quét xong' if complete else 'Đã dừng quét'}: {counts['added']} nhóm mới, {counts['duplicates']} nhóm đã có, {len(counts['needs_review'])} nhóm cần xem lại. Nhóm mới đang tắt; kiểm tra phân loại và quyền link trước khi bật.")
         except Exception as exc:self.update(status='error',message=str(exc)[:500])
         finally:
@@ -179,6 +186,7 @@ class GroupScanner:
                 closed=finish(self.window,self.data,self.previous,self.identity,self.data/'work/group-scan-browser.json')
                 self.update(browser_closed=closed)
             except Exception as exc:self.update(browser_closed=False,browser_close_detail=str(exc)[:200])
+            if token is not None:_BROWSER_PROFILE.reset(token)
     async def scan(self):
         from desktop import (profile_windows,launch_browser,focus_profile,foreground,
                              wait_initial_control,mcp_text,active_window_tree)
@@ -189,7 +197,8 @@ class GroupScanner:
         from desktop import window_identity
         self.window=root;self.previous=previous;self.identity=window_identity(root)
         from browser_cleanup import register
-        register(self.data/'work/group-scan-browser.json',root,previous,self.identity)
+        from desktop import selected_browser_config
+        register(self.data/'work/group-scan-browser.json',root,previous,self.identity,selected_browser_config(self.data))
         params=StdioServerParameters(command=sys.executable,args=['-m','windows_mcp','serve','--transport','stdio','--tools','Snapshot,Shortcut,Scroll'],env={**os.environ,'ANONYMIZED_TELEMETRY':'false'})
         found={};stale=0;complete=False;expected=None
         async with stdio_client(params) as (read,write):

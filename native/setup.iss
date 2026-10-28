@@ -1,7 +1,7 @@
 [Setup]
 AppId={{5728A7EF-6F9B-4AD0-8190-31D281CE48D7}
 AppName=NCT Studio
-AppVersion=1.1.4
+AppVersion=1.1.5
 AppPublisher=NCT Studio
 DefaultDirName={localappdata}\Programs\NCT Studio
 DefaultGroupName=NCT Studio

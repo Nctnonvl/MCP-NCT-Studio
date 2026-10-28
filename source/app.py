@@ -1312,8 +1312,8 @@ class Handler(BaseHTTPRequestHandler):
                 aid=__import__('facebook_accounts').create(STORE,DATA,obj.get('name',''),obj.get('facebook_account',''))
                 result='Đã tạo hồ sơ riêng. Bấm Mở Facebook để tự đăng nhập, rồi gán tài khoản cho nhóm.'
             elif route == '/api/group-account':
-                __import__('facebook_accounts').assign(STORE,int(obj['id']),str(obj['account_id']))
-                result='Đã chọn tài khoản cho lịch mới. Lịch cũ và bài chờ duyệt vẫn dùng tài khoản gốc.'
+                changed=__import__('facebook_accounts').assign(STORE,int(obj['id']),str(obj['account_id']))
+                result=f"Đã chọn tài khoản; đồng bộ {changed['changed']} lịch chưa thao tác. {changed['blocked']} bài riêng khác tài khoản cần xem lại. Bài đã gửi giữ tài khoản gốc."
             elif route == '/api/facebook-account-rename':
                 name=str(obj.get('name','')).strip()
                 if not name or len(name)>80:raise ValueError('Tên cần 1–80 ký tự.')
@@ -1490,7 +1490,7 @@ class Handler(BaseHTTPRequestHandler):
                 result = check_services()
             elif route == '/api/scan-joined-groups':
                 with CONFIG_LOCK:
-                    self.send(200,group_scanner().start());return
+                    self.send(200,group_scanner().start(str(obj.get('account_id','main'))));return
             elif route == '/api/stop-group-scan':
                 group_scanner().stop.set();result='Đang dừng quét sau bước hiện tại.'
             elif route == '/api/browser':
@@ -1559,6 +1559,7 @@ def main():
             while not SHUTDOWN.wait(2):
                 if not psutil.pid_exists(parent):server.shutdown();return
         threading.Thread(target=watch_host,daemon=True).start()
+    __import__('facebook_accounts').sync_queued_accounts(STORE)
     STORE.recover()
     __import__('link_refresh').recover(STORE)
     scan=STORE.get('group_scan',{})

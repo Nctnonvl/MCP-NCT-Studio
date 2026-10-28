@@ -836,7 +836,7 @@ class Store:
         with self.db() as c:
             n = 0
             for jid in job_ids:
-                n += c.execute("UPDATE jobs SET state='queued',updated=? WHERE id=? AND state='draft' AND group_id IN (SELECT id FROM groups WHERE enabled=1)", (time.time(), int(jid))).rowcount
+                n += c.execute("UPDATE jobs SET state='queued',updated=? WHERE id=? AND state='draft' AND group_id IN (SELECT id FROM groups WHERE enabled=1 AND account_id=jobs.account_id)", (time.time(), int(jid))).rowcount
             return n
 
     def prepare_test(self,cid,gid,interval='30-60'):
@@ -955,7 +955,7 @@ class Store:
             cap=max(1,min(30,int(self.get('daily_group_limit',20))))
             used=c.execute("SELECT COUNT(DISTINCT group_id) FROM jobs WHERE calendar_released=0 AND date(CASE WHEN attempted_at>0 THEN attempted_at ELSE updated END,'unixepoch','+7 hours')=date(?,'unixepoch','+7 hours') AND (attempted_at>0 OR state IN ('working','submitted','pending','uncertain'))",(time.time(),)).fetchone()[0]
             if used>=cap:return None
-            candidates = c.execute("SELECT j.*,g.link_policy FROM jobs j JOIN groups g ON g.id=j.group_id WHERE j.state='queued' AND j.calendar_released=0 AND j.due<=? AND g.enabled=1 AND g.next_post_after<=? AND NOT EXISTS (SELECT 1 FROM jobs prev WHERE prev.group_id=j.group_id AND prev.calendar_released=0 AND (prev.state='working' OR (prev.state IN ('submitted','pending','uncertain') AND date(prev.updated,'unixepoch','+7 hours')=date(?,'unixepoch','+7 hours')))) ORDER BY j.due,j.id", (time.time(), time.time(), time.time())).fetchall()
+            candidates = c.execute("SELECT j.*,g.link_policy FROM jobs j JOIN groups g ON g.id=j.group_id WHERE j.state='queued' AND j.account_id=g.account_id AND j.calendar_released=0 AND j.due<=? AND g.enabled=1 AND g.next_post_after<=? AND NOT EXISTS (SELECT 1 FROM jobs prev WHERE prev.group_id=j.group_id AND prev.calendar_released=0 AND (prev.state='working' OR (prev.state IN ('submitted','pending','uncertain') AND date(prev.updated,'unixepoch','+7 hours')=date(?,'unixepoch','+7 hours')))) ORDER BY j.due,j.id", (time.time(), time.time(), time.time())).fetchall()
             job = None
             for candidate in candidates:
                 post=c.execute('SELECT * FROM contents WHERE id=?',(candidate['content_id'],)).fetchone() if candidate['content_id'] else None
