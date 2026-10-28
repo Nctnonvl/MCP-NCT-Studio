@@ -1,0 +1,49 @@
+NCT STUDIO 1.1 — WINDOWS 10/11 x64
+
+CÁCH MỞ
+- Bản Setup: chạy NCT-Studio-Setup.exe, mở NCT Studio từ Desktop hoặc Start.
+- Bản Portable: giải nén toàn bộ thư mục rồi chạy NCT Studio.exe. Không kéo riêng .exe ra ngoài.
+- Python và Windows MCP đã có sẵn. Không cần cài Python hay dùng cửa sổ terminal.
+- Cần Google Chrome để thao tác Facebook. Cần Microsoft Edge WebView2 để hiển thị ứng dụng.
+  Setup sẽ cài WebView2 từ Microsoft nếu thiếu; khi đó cần Internet.
+- AI qua API cần Internet và key của bro. Ollama chỉ cần nếu chọn model local.
+
+DỮ LIỆU
+- Setup lưu ở %LOCALAPPDATA%\NCT Studio\data, tách khỏi file chương trình.
+- Portable lưu ở thư mục data cạnh NCT Studio.exe.
+- Lần mở đầu có nút Nhập dữ liệu cũ: chọn data có manager.sqlite3.
+- Không ghi đè dữ liệu đã có. Muốn nhập, dùng bản Portable mới giải nén chưa có data.
+- Bước nhập sao chép nhóm, nội dung, ảnh/video, lịch sử; dữ liệu gốc giữ nguyên.
+- API key/token phải nhập lại. Phiên trình duyệt cũ không sao chép: tự đăng nhập Facebook.
+- Lịch chưa chạy nhập từ máy cũ trở thành nháp; duyệt lại trước khi bấm Chạy.
+- Chỉ chạy một máy điều khiển cùng bot và Facebook. Dừng ứng dụng máy cũ trước khi chuyển.
+- Có thể chuyển toàn bộ thư mục Portable; ứng dụng tự sửa đường dẫn nội bộ khi mở.
+  Sang tài khoản Windows/máy mới, Chrome có thể yêu cầu đăng nhập lại.
+
+ĐA TÀI KHOẢN
+1. Cài đặt > Tài khoản Facebook > Thêm tài khoản.
+2. Mở Facebook ở từng dòng và tự đăng nhập. Lịch được tạm dừng trong lúc đăng nhập.
+3. Trong Nhóm, chọn tài khoản cho từng nhóm rồi tạo lịch mới.
+4. Lịch cũ và bài chờ duyệt luôn giữ tài khoản gốc.
+
+ĐÓNG VÀ THU NHỎ
+- Nút −: thu nhỏ, ứng dụng và lịch vẫn chạy khi Windows đang mở khóa.
+- Nút X: hiện hộp thoại trong giao diện; xác nhận Thoát sẽ dừng công việc.
+- Máy khóa/ngủ hoặc mất mạng có thể làm tác vụ Facebook dừng; không bảo đảm tự đăng khi khóa máy.
+- Log của bản desktop nằm ở thư mục data\logs. Không công khai file dữ liệu, key hay phiên đăng nhập.
+
+GIỚI HẠN BẢN PHÁT HÀNH
+- Chỉ hỗ trợ Windows 10/11 x64; không hỗ trợ macOS/Linux/Windows ARM.
+- Setup và EXE chưa ký chứng thư phát hành thương mại.
+- Không bảo đảm mọi nhóm đều duyệt bài; kết quả phụ thuộc quyền đăng và trạng thái Facebook.
+- Tài liệu kiểm thử kèm bản phát hành ghi rõ phần mô phỏng và kiểm thử ứng dụng thực tế.
+
+BÀI RIÊNG CHO TỪNG TÀI KHOẢN
+- Ở Soạn bài, chọn Bài viết của tài khoản. Dùng chung áp dụng theo tài khoản của nhóm.
+- Bài riêng bị chặn khi xếp vào nhóm dùng tài khoản khác; kho bài và lịch có tên tác giả.
+
+CẬP NHẬT ONLINE
+- Cài đặt > Cập nhật ứng dụng > Kiểm tra cập nhật.
+- Nguồn mặc định: GitHub Releases của Nctnonvl/MCP-NCT-Studio.
+- Tải và cài chỉ chạy khi có bản cao hơn, manifest có chữ ký đúng và file khớp SHA-256.
+- Cần phát hành NCT-Studio-Setup.exe và update.json lên cùng bản GitHub Release.
