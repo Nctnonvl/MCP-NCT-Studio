@@ -12,7 +12,7 @@ Hỗ trợ Windows 10/11 x64. Cần Google Chrome cho Facebook và Microsoft Edg
 
 - Bộ cài lưu dữ liệu trong `%LOCALAPPDATA%\NCT Studio\data`.
 - Portable lưu dữ liệu cạnh ứng dụng.
-- Mỗi tài khoản Facebook dùng hồ sơ Chrome riêng; chọn tài khoản cho từng nhóm.
+- Mỗi tài khoản Facebook dùng hồ sơ Chrome riêng; chọn tài khoản cho từng nhóm. Có thể chọn một hồ sơ Chrome đã đăng nhập trong Cài đặt → Tài khoản Facebook; tool kiểm tra nhãn hồ sơ trước thao tác và không sao chép cookie.
 - Bài riêng chỉ được lên lịch cho nhóm dùng đúng tài khoản đó.
 
 ## Mã nguồn mở
