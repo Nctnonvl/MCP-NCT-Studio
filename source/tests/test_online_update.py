@@ -1,4 +1,5 @@
-import base64,json,tempfile,unittest
+import base64,json,tempfile,unittest,hashlib,io
+from unittest.mock import patch
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization,hashes
 from cryptography.hazmat.primitives.asymmetric import rsa,padding
@@ -10,6 +11,19 @@ class UpdateTests(unittest.TestCase):
  def tearDown(self):self.tmp.cleanup()
  def envelope(self,info):
   payload=json.dumps(info);return json.dumps({'payload':payload,'signature':base64.b64encode(self.key.sign(payload.encode(),padding.PKCS1v15(),hashes.SHA256())).decode()})
+ def test_download_ignores_old_partial(self):
+  body=b'MZ'+b'installer';info={'version':'9.0.0','url':'https://example.com/setup.exe','sha256':hashlib.sha256(body).hexdigest()}
+  class Store:
+   def get(self,key,default=None):return info if key=='update_status' else default
+  updates=Path(self.tmp.name)/'updates';updates.mkdir();old=updates/'NCT-Studio-Setup-9.0.0.partial';old.write_bytes(b'old')
+  with patch.object(online_update,'check',return_value={'available':True}),patch.object(online_update.urllib.request,'urlopen',return_value=io.BytesIO(body)):
+   result=online_update.download(Store(),self.tmp.name,self.tmp.name)
+  self.assertEqual(Path(result['path']).read_bytes(),body);self.assertEqual(old.read_bytes(),b'old')
+ def test_duplicate_download_is_blocked(self):
+  online_update._DOWNLOAD_LOCK.acquire()
+  try:
+   with self.assertRaisesRegex(ValueError,'Đang tải'):online_update.download(None,None,None)
+  finally:online_update._DOWNLOAD_LOCK.release()
  def test_signed_manifest_accepted(self):
   info={'version':'1.2.0','url':'https://github.com/example/app/releases/download/v1.2.0/setup.exe','sha256':'a'*64}
   self.assertEqual(online_update.verify(self.envelope(info),self.public),info)

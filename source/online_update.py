@@ -1,9 +1,10 @@
 """Updates require an HTTPS feed and a manifest signed by this release key."""
-import base64,hashlib,json,re,urllib.request
+import base64,hashlib,json,re,urllib.request,threading,uuid
 from pathlib import Path
 from urllib.parse import urlsplit
-VERSION='1.1.6'
+VERSION='1.1.7'
 FEED='https://github.com/Nctnonvl/MCP-NCT-Studio/releases/latest/download/update.json'
+_DOWNLOAD_LOCK=threading.Lock()
 
 def url(value):
     p=urlsplit(str(value))
@@ -33,11 +34,16 @@ def check(store,root):
     return {'available':available,'version':info['version'],'message':'Có bản '+info['version']+'. Bấm Tải và cài khi sẵn sàng.' if available else 'Bro đang dùng bản mới nhất của nguồn phát hành này.'}
 
 def download(store,root,data):
+    if not _DOWNLOAD_LOCK.acquire(blocking=False):raise ValueError('Đang tải bản cập nhật. Vui lòng chờ lượt tải hiện tại hoàn tất.')
+    try:return _download(store,root,data)
+    finally:_DOWNLOAD_LOCK.release()
+
+def _download(store,root,data):
     # Re-fetch and verify signed metadata at download time, never trust a browser-supplied URL.
     checked=check(store,root)
     if not checked['available']:raise ValueError('Chưa có bản mới để cài.')
     info=store.get('update_status',{});folder=Path(data)/'updates';folder.mkdir(exist_ok=True)
-    target=folder/('NCT-Studio-Setup-'+info['version']+'.exe');partial=target.with_suffix('.partial')
+    target=folder/('NCT-Studio-Setup-'+info['version']+'-'+uuid.uuid4().hex+'.exe');partial=target.with_suffix('.partial')
     digest=hashlib.sha256();size=0
     try:
         with urllib.request.urlopen(urllib.request.Request(url(info['url']),headers={'User-Agent':'NCT-Studio/'+VERSION}),timeout=60) as response,partial.open('wb') as output:
@@ -52,6 +58,8 @@ def download(store,root,data):
             if file.read(2)!=b'MZ':raise ValueError('Gói cập nhật không phải bộ cài Windows.')
         partial.replace(target)
         return {'path':str(target.resolve()),'sha256':info['sha256'],'version':info['version']}
-    finally:partial.unlink(missing_ok=True)
+    finally:
+        try:partial.unlink(missing_ok=True)
+        except OSError:pass
 
 def status(store):return {'version':VERSION,'feed':store.get('update_feed',FEED),'latest':store.get('update_status',{})}
