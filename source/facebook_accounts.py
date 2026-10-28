@@ -40,20 +40,24 @@ def chrome_profiles():
     for item in profiles:item['usable']=sum(p['name'].casefold()==item['name'].casefold() for p in profiles)==1
     return sorted(profiles,key=lambda item:item['name'].casefold())
 
-def use_chrome_profile(store,directory,name,facebook_account=''):
-    name=str(name).strip();actor=str(facebook_account).strip()
-    if not name or len(name)>80 or len(actor)>100:raise ValueError('Nhập tên tài khoản tối đa 80 ký tự.')
+def chrome_profile_config(directory,name='',facebook_account=''):
     choices=[p for p in chrome_profiles() if p['id']==directory and p['usable']]
     if len(choices)!=1:raise ValueError('Không tìm thấy hồ sơ Chrome duy nhất. Tải lại danh sách và chọn lại.')
+    name=str(name).strip() or choices[0]['name'];actor=str(facebook_account).strip()
+    if not name or len(name)>80 or len(actor)>100:raise ValueError('Nhập tên tài khoản tối đa 80 ký tự.')
     root=(Path(os.environ['LOCALAPPDATA'])/'Google/Chrome/User Data').resolve()
+    return {'browser':'chrome','user_data_dir':str(root),'profile_directory':directory,'display_name':name,'facebook_account':actor,'shared_profile_name':choices[0]['name']}
+
+def use_chrome_profile(store,directory,name,facebook_account=''):
+    profile=chrome_profile_config(directory,name,facebook_account)
+    root=Path(profile['user_data_dir'])
     aid='acc_'+secrets.token_hex(8)
-    profile={'browser':'chrome','user_data_dir':str(root),'profile_directory':directory,'display_name':name,'facebook_account':actor,'shared_profile_name':choices[0]['name']}
     with store.db() as c:
         c.execute('BEGIN IMMEDIATE')
         for existing in c.execute('SELECT profile FROM facebook_accounts'):
             other=json.loads(existing['profile'])
             if other.get('browser')=='chrome' and os.path.normcase(str(other.get('user_data_dir','')))==os.path.normcase(str(root)) and other.get('profile_directory')==directory:raise ValueError('Hồ sơ Chrome này đã được thêm vào tool.')
-        c.execute('INSERT INTO facebook_accounts VALUES(?,?,?,?)',(aid,name,json.dumps(profile,ensure_ascii=False),time.time()))
+        c.execute('INSERT INTO facebook_accounts VALUES(?,?,?,?)',(aid,profile['display_name'],json.dumps(profile,ensure_ascii=False),time.time()))
     return aid
 
 def assign(store,gid,aid):

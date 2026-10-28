@@ -14,8 +14,8 @@ using Microsoft.Web.WebView2.WinForms;
 
 [assembly:System.Reflection.AssemblyTitle("NCT Studio")]
 [assembly:System.Reflection.AssemblyDescription("NCT Studio desktop")]
-[assembly:System.Reflection.AssemblyVersion("1.1.3.0")]
-[assembly:System.Reflection.AssemblyFileVersion("1.1.3.0")]
+[assembly:System.Reflection.AssemblyVersion("1.1.4.0")]
+[assembly:System.Reflection.AssemblyFileVersion("1.1.4.0")]
 static class Program {
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int command);

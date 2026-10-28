@@ -43,6 +43,10 @@ class AccountTests(unittest.TestCase):
   (profile/'Preferences').write_text('{}');(root/'Local State').write_text(json.dumps({'profile':{'info_cache':{'Profile 2':{'name':'Test Chrome','user_name':'private@example.invalid'}}}}))
   with patch.dict(os.environ,{'LOCALAPPDATA':str(self.data)}):
    self.assertEqual(accounts.chrome_profiles(),[{'id':'Profile 2','name':'Test Chrome','usable':True}])
+   selected=accounts.chrome_profile_config('Profile 2')
+   self.assertEqual(selected['profile_directory'],'Profile 2')
+   self.assertEqual(selected['display_name'],'Test Chrome')
+   self.assertEqual(self.s.rows('SELECT count(*) AS n FROM facebook_accounts')[0]['n'],1)
    aid=accounts.use_chrome_profile(self.s,'Profile 2','Facebook test');accounts.assign(self.s,self.g,aid)
    jid=self.plan('Test frozen profile');saved=json.loads(self.job(jid)['browser_profile_json'])
    self.assertEqual(saved['profile_directory'],'Profile 2');self.assertEqual(saved['shared_profile_name'],'Test Chrome')

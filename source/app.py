@@ -1497,19 +1497,24 @@ class Handler(BaseHTTPRequestHandler):
                 from desktop import launch_browser
                 from desktop import _BROWSER_PROFILE
                 from approval_followup import busy
+                selected_profile=None
+                if obj.get('profile_id'):
+                    selected_profile=__import__('facebook_accounts').chrome_profile_config(str(obj['profile_id']))
                 with STORE.db() as c:
                     c.execute('BEGIN IMMEDIATE')
                     if busy(c) or c.execute("SELECT 1 FROM jobs WHERE state='working'").fetchone():raise ValueError('Tool đang thao tác Facebook. Chờ lượt hiện tại xong rồi mở hồ sơ đăng nhập.')
                     if STORE.get('group_scan',{}).get('status')=='running' or c.execute("SELECT 1 FROM link_refresh WHERE state IN ('queued','working')").fetchone():raise ValueError('Đang quét nhóm/cập nhật link; chờ xong rồi mở hồ sơ.')
-                    account=c.execute('SELECT * FROM facebook_accounts WHERE id=?',(str(obj.get('account_id','main')),)).fetchone()
-                    if not account:raise ValueError('Không tìm thấy tài khoản.')
+                    account=c.execute('SELECT * FROM facebook_accounts WHERE id=?',(str(obj.get('account_id','main')),)).fetchone() if not selected_profile else None
+                    if not selected_profile and not account:raise ValueError('Không tìm thấy tài khoản.')
                     for key in ('running','approval_monitor_enabled'):
                         c.execute("INSERT INTO kv(k,v) VALUES(?,'false') ON CONFLICT(k) DO UPDATE SET v=excluded.v",(key,))
                     c.execute("INSERT INTO kv(k,v) VALUES('paused_by_user','true') ON CONFLICT(k) DO UPDATE SET v=excluded.v")
-                token=_BROWSER_PROFILE.set(json.loads(account['profile']))
+                profile=selected_profile or json.loads(account['profile'])
+                account_name=profile['display_name'] if selected_profile else account['name']
+                token=_BROWSER_PROFILE.set(profile)
                 try:launch_browser(DATA, 'https://www.facebook.com/')
                 finally:_BROWSER_PROFILE.reset(token)
-                result = 'Đã tạm dừng lịch và mở hồ sơ '+account['name']+'. Bro tự đăng nhập, gán nhóm rồi bấm Chạy khi sẵn sàng.'
+                result = 'Đã tạm dừng lịch và yêu cầu mở hồ sơ '+account_name+'. Kiểm tra tên profile trong cửa sổ Chrome; thêm hồ sơ vào tool trước khi gán nhóm.'
             else:
                 raise ValueError('Không tìm thấy chức năng.')
             self.send(200, {'message': result})
