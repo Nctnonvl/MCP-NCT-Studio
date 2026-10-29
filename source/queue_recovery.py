@@ -24,10 +24,11 @@ def hard_pause(result):
     detail=str(result.get('detail','')).casefold()
     return any(s in detail for s in ('gặp cảnh báo hoặc yêu cầu xác minh','captcha','tài khoản bị hạn chế','temporarily blocked','người dùng yêu cầu dừng','quyền thao tác đã chuyển','mcp đang nhường','cửa sổ đang hoạt động đã đổi','windows đang khóa','control_preempted','user_control','takeover_pending'))
 
-def reflow(connection, now, next_allowed, cap,compact=False):
+def reflow(connection, now, next_allowed, cap,compact=False,priority_jid=None):
     jobs = connection.execute("SELECT j.*,g.next_post_after FROM jobs j JOIN groups g ON g.id=j.group_id WHERE j.state='queued' AND g.enabled=1 AND g.deleted=0 ORDER BY j.due,j.id").fetchall()
     if not jobs:
         return 0
+    if priority_jid is not None:jobs=sorted(jobs,key=lambda j:(j["id"]!=priority_jid,j["due"],j["id"]))
     used = {}
     occupied = {}
     for row in connection.execute("SELECT group_id,state,CASE WHEN attempted_at>0 THEN attempted_at ELSE updated END AS at FROM jobs WHERE calendar_released=0 AND (attempted_at>0 OR state IN ('working','submitted','pending','uncertain'))"):
@@ -44,7 +45,7 @@ def reflow(connection, now, next_allowed, cap,compact=False):
     for job in jobs:
         gid=job['group_id']
         job_cap=min(cap,job['campaign_daily_limit']) if 'campaign_daily_limit' in job.keys() and job['campaign_daily_limit'] else cap
-        floor=dt.datetime.combine(day(job['due']),dt.time(),VN).timestamp() if compact else job['due']
+        floor=now if priority_jid is not None else dt.datetime.combine(day(job['due']),dt.time(),VN).timestamp() if compact else job['due']
         due=max(floor,cursor,job['next_post_after'],group_due.get(gid,0))
         # Keep both the daily attempted-group cap and one slot per group/day.
         while gid in occupied.get(day(due),set()) or len(used.get(day(due),set()))>=job_cap:

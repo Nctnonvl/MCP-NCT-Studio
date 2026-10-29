@@ -229,6 +229,17 @@ def run_queue(expected_revision=None):
         STORE.set('running', True)
 
 
+def queue_action(jid,immediate=False):
+    if not runtime_ready():raise ValueError('Khởi động lại ứng dụng để nạp bản mới.')
+    with CONFIG_LOCK:
+        if studio().lock.locked():raise ValueError('AI đang tạo lịch. Chờ hoàn tất rồi đổi lịch.')
+        if immediate and (load_config()['mode']!='publish' or not load_config().get('token') or not STORE.get('owner_id')):raise ValueError('Ghép Telegram và chọn chế độ Tự đăng trước khi đăng ngay.')
+        from queue_actions import move_now,restore
+        result=(move_now if immediate else restore)(STORE,jid)
+        if immediate:STOP_WORK.clear()
+    return f"Đã {'đưa lên đầu và bật hàng đợi' if immediate else 'khôi phục lịch lỗi'}: lượt #{result['job_id']}, dự kiến {timestamp(result['due'])}. Giữ khoảng nghỉ và giới hạn đăng."
+
+
 def control_approval_monitor(action):
     if action not in {'run','pause'}:raise ValueError('Thao tác theo dõi duyệt không hợp lệ.')
     if action=='pause':
@@ -1419,6 +1430,10 @@ class Handler(BaseHTTPRequestHandler):
                 send_text(chat,'NCT Studio · Menu đã cập nhật. Chọn chức năng bên dưới.',True)
                 panel(chat)
                 result='Đã gửi menu mới vào Telegram của bạn.'
+            elif route == '/api/job-restore':
+                result=queue_action(int(obj['id']))
+            elif route == '/api/job-now':
+                result=queue_action(int(obj['id']),True)
             elif route == '/api/clear-jobs':
                 result=clear_job_list()
             elif route == '/api/approve':
